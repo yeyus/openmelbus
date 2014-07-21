@@ -1,0 +1,22 @@
+http://forums.swedespeed.com/showthread.php?32512-Sensolutions-iMIV-video-iPod-Multi-Media-Melbus-Module&p=280582&viewfull=1#post280582
+To tell you a little bit more about the startup seqence:
+"""The HU sends out a series of bytes, which I think is a kind of device list. If the device is attached to the bus it responses to its 'device-id' by sending a response byte. So, what I did was try to respond to all existing device-id's. Nothing happened (besides the CD-C of course)."""
+
+Melbus test sketch
+0.
+UNKNOWN
+0.1A.ED.80.86.
+UNKNOWN
+0.1A.EC.87.87.F8.83.EF.0.F.44.
+UNKNOWN
+0.1A.EC.87.87.F9.80.E1.2.0.4.80.2.C.CC.CC.
+UNKNOWN
+80.1E.EF.0.0.F.44.0.F.
+UNKNOWN
+81.1B.E0.1.8.0.2.0.4.80.2.C.CC.CC.
+PLAY_INFO
+DISC:4TRACK:2 - CCmCCs
+80.1E.EF.0.0.F.44.0.F.
+UNKNOWN
+80.1E.EF.0.0.F.44.0.F.
+UNKNOWN
