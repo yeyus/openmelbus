@@ -50,13 +50,14 @@ void main(void)
 
   //while(!bitRead(PORTD, 5)) {}; // MRUN
   signal_hu_presence();
+
+  // Initialize serial port
+  uart0_init(UART_BAUD_SELECT(115200, 16000000L)+1);
   
   sei();
  
-  // Initialize serial port
-  Serial.begin(115200,SERIAL_8N1);
-  Serial.println("RUN state active");
-  Serial.println("Melbus Injector -- Jesus Trujillo 2014(C)");
+  uart0_puts("RUN state active");
+  uart0_puts("Melbus Injector -- Jesus Trujillo 2014(C)");
   
   // Infinte loop
   while(1) {
@@ -67,9 +68,9 @@ void main(void)
       if(cmd == CMD_UNKNOWN) {
         for(uint8_t i = 0;i<byteMarker;i++) {
           Serial.print(dataIn[i], HEX);
-          Serial.print(".");
+          uart0_puts(".");
         }
-        Serial.print("\r\n");
+        uart0_puts("\r\n");
       }
       debug_melbus_command(cmd);
       delivered = true;
@@ -129,36 +130,36 @@ void debug_melbus_command(int cmd)
 {
   switch(cmd) {
     case CMD_UNKNOWN:
-      Serial.println("UNKNOWN");
+      uart0_puts("UNKNOWN");
       break;
     case CMD_FF:
-      Serial.println("FF");
+      uart0_puts("FF");
       break;
     case CMD_FR:
-      Serial.println("FR");
+      uart0_puts("FR");
       break;
     case CMD_RND:
-      Serial.println("RND");
+      uart0_puts("RND");
       break;
     case CMD_DISC_UP:
-      Serial.println("DISC_UP");
+      uart0_puts("DISC_UP");
       break;
     case CMD_DISC_DOWN:
-      Serial.println("DISC_DOWN");
+      uart0_puts("DISC_DOWN");
       break;
     case CMD_TRACK_UP:
-      Serial.println("TRACK_UP");
+      uart0_puts("TRACK_UP");
       break;
     case CMD_TRACK_DOWN:
-      Serial.println("TRACK_DOWN");
+      uart0_puts("TRACK_DOWN");
       break;
     case CMD_POWER_DOWN:
-      Serial.println("POWER_DOWN");
+      uart0_puts("POWER_DOWN");
       break;
     case CMD_PLAY_INFO_1A:
-      Serial.println("PLAY_INFO_1A");
+      uart0_puts("PLAY_INFO_1A");
     case CMD_PLAY_INFO_1B:
-      Serial.println("PLAY_INFO");
+      uart0_puts("PLAY_INFO");
       Serial.print("DISC:");
       Serial.print(dataIn[8],HEX);
       Serial.print("TRACK:");
@@ -167,17 +168,17 @@ void debug_melbus_command(int cmd)
       Serial.print(dataIn[12],HEX);
       Serial.print("m");
       Serial.print(dataIn[13],HEX);
-      Serial.println("s");
+      uart0_puts("s");
       break;
     case CMD_CHG_INFO_REQ:
-      Serial.println("CHG_INFO_REQUEST");
+      uart0_puts("CHG_INFO_REQUEST");
       break;
     case CMD_DEVICE_ID_REQ:
-      Serial.println("DEVICE_ID_REQUEST");
+      uart0_puts("DEVICE_ID_REQUEST");
       device_recognition();
       break;
     case CMD_DEVICE_CD_INIT:
-      Serial.println("DEVICE_CD_INIT");
+      uart0_puts("DEVICE_CD_INIT");
       break;
   }
 }
@@ -187,15 +188,15 @@ void device_recognition()
   for(uint8_t i=0;i<byteMarker;i++)
   {
     if(dataIn[i] == DEVICE_CD && dataIn[i+1]!=0xFF) {
-      Serial.println("Found DEVICE_CD");
+      uart0_puts("Found DEVICE_CD");
     } else if (dataIn[i] == DEVICE_TV && dataIn[i+1] != 0xFF) {
-      Serial.println("Found DEVICE_TV");
+      uart0_puts("Found DEVICE_TV");
     } else if (dataIn[i] == DEVICE_SAT && dataIn[i+1] != 0xFF) {
-      Serial.println("Found DEVICE_SAT");
+      uart0_puts("Found DEVICE_SAT");
     } else if (dataIn[i] == DEVICE_MDC && dataIn[i+1] != 0xFF) {
-      Serial.println("Found DEVICE_MDC");
+      uart0_puts("Found DEVICE_MDC");
     } else if (dataIn[i] == DEVICE_CDC && dataIn[i+1] != 0xFF) {
-      Serial.println("Found DEVICE_CDC");
+      uart0_puts("Found DEVICE_CDC");
      }
   }
 }

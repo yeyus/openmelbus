@@ -13,6 +13,7 @@
 #include <avr/interrupt.h>
 #include <avr/io.h>
 #include <util/delay.h>
+#include "uart/uart.h"
 
 // MCU Settings
 #define F_CPU 16000000UL  // 16 MHz
