@@ -18,3 +18,13 @@ tramp
 # eshell files
 /eshell/history
 /eshell/lastdir
+
+# C files
+*.o
+*.obj
+*.hex
+*.map
+*.lst
+*.srec
+*.bin
+*.elf

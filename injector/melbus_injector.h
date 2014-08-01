@@ -10,6 +10,7 @@
  */
 
 #include <stdint.h>
+#include <stdlib.h>
 #include <avr/interrupt.h>
 #include <avr/io.h>
 #include <util/delay.h>
@@ -20,12 +21,19 @@
 
 #define HIGH        1
 #define LOW         0
+#define TRUE        1
+#define FALSE       0
 
 // Data lines definition
+// MCLK     Pin 2 - PD2
 #define MCLK         2
+// MBUSY    Pin 3 - PD3
 #define MBUSY        3
+// MDATA    Pin 4 - PD4
 #define MDATA        4
+// MRUN     Pin 5 - PD5
 #define MRUN         5
+// LOG_ISR  Pin 6 - PD6
 #define LOG_ISR      6
 
 
@@ -51,6 +59,7 @@
 #define DEVICE_CDC           0xE8
 
 #define BUFSIZE 80
+#define UTOA_BUFSIZE 16
 
 void main(void) __attribute__((noreturn));
 void signal_hu_presence();
