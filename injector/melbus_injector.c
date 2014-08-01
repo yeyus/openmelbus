@@ -1,62 +1,51 @@
-#include <avr/interrupt.h>
-#include <avr/io.h>
-
-// Data lines definition
-#define MCLK         2
-#define MBUSY        3
-#define MDATA        4
-#define MRUN         5
-#define LOG_ISR      6
-
-
-#define CMD_UNKNOWN      0
-#define CMD_FF           1
-#define CMD_FR           2
-#define CMD_RND          3
-#define CMD_TRACK_UP     4
-#define CMD_TRACK_DOWN   5
-#define CMD_DISC_UP      6
-#define CMD_DISC_DOWN    7
-#define CMD_POWER_DOWN   8
-#define CMD_PLAY_INFO_1B    9
-#define CMD_PLAY_INFO_1A    12
-#define CMD_CHG_INFO_REQ     10
-#define CMD_DEVICE_ID_REQ    11
-#define CMD_DEVICE_CD_INIT   13
-
-#define DEVICE_CD            0x80
-#define DEVICE_TV            0xA9
-#define DEVICE_SAT           0xC0
-#define DEVICE_MDC           0xD8
-#define DEVICE_CDC           0xE8
-
-#define BUFSIZE 80
+/**
+ * OpenMelbus - Melbus Injector
+ *
+ *  Copyright 2014 by Jesus F. Trujillo <elyeyus@gmail.com>
+ *
+ *  Licensed under GNU General Public License 3.0 or later.
+ *  Some rights reserved. See COPYING, AUTHORS.
+ *
+ * @license GPL-3.0+ <http://spdx.org/licenses/GPL-3.0+>
+ */
+ 
+#include "melbus_injector.h"
 
 #define LOGGING
 
-volatile byte dataIn[BUFSIZE];
-volatile byte dataOut;
-volatile int byteMarker = 0;
-volatile int bitMarker = 7;
-volatile int busy = HIGH;
-volatile int delivered = true;
+char strbuf[UTOA_BUFSIZE];
+volatile uint8_t dataIn[BUFSIZE];
+volatile uint8_t dataOut;
+volatile uint8_t byteMarker = 0;
+volatile uint8_t bitMarker = 7;
+volatile uint8_t busy = HIGH;
+volatile uint8_t delivered = HIGH;
 
-const int knownDevices[] = {DEVICE_CD, DEVICE_TV, DEVICE_SAT, DEVICE_MDC, DEVICE_CDC};
-const int enabledDevices[] = {DEVICE_TV, DEVICE_MDC, DEVICE_CDC};
-const int enabledDevicesCount = 3;
-volatile int devicePointer;
+const uint8_t knownDevices[] = {DEVICE_CD, DEVICE_TV, DEVICE_SAT, DEVICE_MDC, DEVICE_CDC};
+const uint8_t enabledDevices[] = {DEVICE_TV, DEVICE_MDC, DEVICE_CDC};
+const uint8_t enabledDevicesCount = 3;
+volatile uint8_t devicePointer;
 
-const int deviceId[] = {0xA9, 0xE8};
-const int deviceNum = 2;
+const uint8_t deviceId[] = {0xA9, 0xE8};
+const uint8_t deviceNum = 2;
 
-void setup() 
+void main(void)
 {
+  // Setup phase
   cli();
   
-  pinMode(MBUSY,INPUT_PULLUP);
-  pinMode(MCLK, INPUT_PULLUP);
-  pinMode(MDATA, INPUT_PULLUP);
-  pinMode(MRUN, INPUT);
+  // MBUSY
+  DDRD &= ~(1<<DDD3); //input
+  PORTD |= (1 << PORTD3); // pull up
+  // MCLK
+  DDRD &= ~(1<<DDD2); //input
+  PORTD |= (1 << PORTD2); // pull up
+  // MDATA
+  DDRD &= ~(1<<DDD4); //input
+  PORTD |= (1 << PORTD4); // pull up
+  // MRUN
+  DDRD &= ~(1<<DDD5); //input
+  PORTD |= (1 << PORTD5); // pull up
   
   #ifdef LOGGING
   DDRD |= (1<<PIND6); // Set LOG_ISR output
@@ -70,45 +59,47 @@ void setup()
 
   //while(!bitRead(PORTD, 5)) {}; // MRUN
   signal_hu_presence();
+
+  // Initialize serial port
+  uart0_init(UART_BAUD_SELECT(115200, 16000000L)+1);
   
   sei();
  
-  // Initialize serial port
-  Serial.begin(115200,SERIAL_8N1);  
-  Serial.println("RUN state active");
-  Serial.println("Melbus Analyzer -- Jesus Trujillo 2014(C)");
-}
-
-void loop() 
-{
-  int cmd = CMD_UNKNOWN;
-  if(busy == HIGH && delivered == false) 
-  {
-    cmd = parse_melbus_command();
-    if(cmd == CMD_UNKNOWN) {
-      for(int i = 0;i<byteMarker;i++) {
-        Serial.print(dataIn[i], HEX);
-        Serial.print(".");
+  uart0_puts("RUN state active\n");
+  uart0_puts("Melbus Injector -- Jesus Trujillo 2014(C)\n");
+  
+  // Infinte loop
+  while(1) {
+    uint8_t cmd = CMD_UNKNOWN;
+    if(busy == HIGH && delivered == FALSE)
+    {
+      cmd = parse_melbus_command();
+      if(cmd == CMD_UNKNOWN) {
+        uint8_t i;
+        for(i = 0;i<byteMarker;i++) {
+          uart0_puts(utoa(dataIn[i], strbuf, 16));
+          uart0_puts(".");
+        }
+        uart0_puts("\r\n");
       }
-      Serial.print("\r\n");
+      debug_melbus_command(cmd);
+      delivered = TRUE;
     }
-    debug_melbus_command(cmd);
-    delivered = true;
-  } 
+  }
 }
 
 void signal_hu_presence()
 {
   DDRD |= (1<<PIND3); // Set MBUSY output
   PORTD &= ~(1 << PD3); // Write 0
-  delay(1500);
+  _delay_ms(1500);
   DDRD &= ~(1<<PIND3); // input
   PORTD |= (1<<PD3); // enable pull-up
 }
 
-int parse_melbus_command()
+uint8_t parse_melbus_command()
 {
-  int cmd = CMD_UNKNOWN;
+  uint8_t cmd = CMD_UNKNOWN;
   if (dataIn[1]==0x19 && dataIn[2]==0x2F) {
     cmd = CMD_FR;
   } else if (dataIn[1]==0x19 && dataIn[2]==0x29) {
@@ -117,25 +108,25 @@ int parse_melbus_command()
     cmd = CMD_RND;
   } else if (dataIn[1]==0x19 && dataIn[2]==0x22) {
     cmd = CMD_POWER_DOWN;
-  } else if (dataIn[1]==0x1B && dataIn[2]==0x2D && 
+  } else if (dataIn[1]==0x1B && dataIn[2]==0x2D &&
       dataIn[3]==0x40 && dataIn[4]==0x01) {
     cmd = CMD_TRACK_UP;
-  } else if (dataIn[1]==0x1B && dataIn[2]==0x2D && 
+  } else if (dataIn[1]==0x1B && dataIn[2]==0x2D &&
       dataIn[3]==0x00 && dataIn[4]==0x01) {
     cmd = CMD_TRACK_DOWN;
-  } else if (dataIn[1]==0x1A && dataIn[2]==0x50 && 
+  } else if (dataIn[1]==0x1A && dataIn[2]==0x50 &&
       dataIn[3]==0x41) {
     cmd = CMD_DISC_UP;
-  } else if (dataIn[1]==0x1A && dataIn[2]==0x50 && 
+  } else if (dataIn[1]==0x1A && dataIn[2]==0x50 &&
       dataIn[3]==0x01) {
     cmd = CMD_DISC_DOWN;
   } else if (dataIn[1]==0x1B && dataIn[2]==0xE0) {
-    cmd = CMD_PLAY_INFO_1B;  
+    cmd = CMD_PLAY_INFO_1B;
   } else if (dataIn[1]==0x1A && dataIn[2]==0xE0) {
-    cmd = CMD_PLAY_INFO_1A;  
+    cmd = CMD_PLAY_INFO_1A;
   } else if (dataIn[1]==0x1E && dataIn[2]==0xEF) {
-    cmd = CMD_CHG_INFO_REQ;  
-  } else if (dataIn[2]==0xED && dataIn[3]==0x80 && dataIn[4]==0x86) {  
+    cmd = CMD_CHG_INFO_REQ;
+  } else if (dataIn[2]==0xED && dataIn[3]==0x80 && dataIn[4]==0x86) {
     cmd = CMD_DEVICE_CD_INIT;
   } else if (dataIn[0]==0x07 && dataIn[1]==0x1A && dataIn[2]==0xEE) {
     cmd = CMD_DEVICE_ID_REQ;
@@ -145,76 +136,78 @@ int parse_melbus_command()
   return cmd;
 }
 
-void debug_melbus_command(int cmd) {
+void debug_melbus_command(int cmd)
+{
   switch(cmd) {
     case CMD_UNKNOWN:
-      Serial.println("UNKNOWN");
+      uart0_puts("UNKNOWN\n");
       break;
     case CMD_FF:
-      Serial.println("FF");    
+      uart0_puts("FF\n");
       break;
     case CMD_FR:
-      Serial.println("FR");    
+      uart0_puts("FR\n");
       break;
     case CMD_RND:
-      Serial.println("RND");
+      uart0_puts("RND\n");
       break;
     case CMD_DISC_UP:
-      Serial.println("DISC_UP");
+      uart0_puts("DISC_UP\n");
       break;
     case CMD_DISC_DOWN:
-      Serial.println("DISC_DOWN");
+      uart0_puts("DISC_DOWN\n");
       break;
     case CMD_TRACK_UP:
-      Serial.println("TRACK_UP");
+      uart0_puts("TRACK_UP\n");
       break;
     case CMD_TRACK_DOWN:
-      Serial.println("TRACK_DOWN");
+      uart0_puts("TRACK_DOWN\n");
       break;
     case CMD_POWER_DOWN:
-      Serial.println("POWER_DOWN");
+      uart0_puts("POWER_DOWN\n");
       break;
     case CMD_PLAY_INFO_1A:
-      Serial.println("PLAY_INFO_1A");
+      uart0_puts("PLAY_INFO_1A\n");
     case CMD_PLAY_INFO_1B:
-      Serial.println("PLAY_INFO");
-      Serial.print("DISC:");
-      Serial.print(dataIn[8],HEX);
-      Serial.print("TRACK:");
-      Serial.print(dataIn[10],HEX);
-      Serial.print(" - ");
-      Serial.print(dataIn[12],HEX);
-      Serial.print("m");
-      Serial.print(dataIn[13],HEX);
-      Serial.println("s");
+      uart0_puts("PLAY_INFO\n");
+      uart0_puts("DISC:");
+      uart0_puts(utoa(dataIn[8], strbuf, 16));
+      uart0_puts("TRACK:");
+      uart0_puts(utoa(dataIn[10], strbuf, 16));
+      uart0_puts(" - ");
+      uart0_puts(utoa(dataIn[12], strbuf, 16));
+      uart0_puts("m");
+      uart0_puts(utoa(dataIn[13], strbuf, 16));
+      uart0_puts("s");
       break;
     case CMD_CHG_INFO_REQ:
-      Serial.println("CHG_INFO_REQUEST");
+      uart0_puts("CHG_INFO_REQUEST\n");
       break;
     case CMD_DEVICE_ID_REQ:
-      Serial.println("DEVICE_ID_REQUEST");
+      uart0_puts("DEVICE_ID_REQUEST\n");
       device_recognition();
       break;
     case CMD_DEVICE_CD_INIT:
-      Serial.println("DEVICE_CD_INIT");
+      uart0_puts("DEVICE_CD_INIT\n");
       break;
   }
 }
 
-void device_recognition() 
+void device_recognition()
 {
-  for(int i=0;i<byteMarker;i++) 
+  uint8_t i;
+  for(i=0;i<byteMarker;i++)
   {
     if(dataIn[i] == DEVICE_CD && dataIn[i+1]!=0xFF) {
-      Serial.println("Found DEVICE_CD");
+      uart0_puts("Found DEVICE_CD\n");
     } else if (dataIn[i] == DEVICE_TV && dataIn[i+1] != 0xFF) {
-      Serial.println("Found DEVICE_TV");
+      uart0_puts("Found DEVICE_TV\n");
     } else if (dataIn[i] == DEVICE_SAT && dataIn[i+1] != 0xFF) {
-      Serial.println("Found DEVICE_SAT");
+      uart0_puts("Found DEVICE_SAT\n");
     } else if (dataIn[i] == DEVICE_MDC && dataIn[i+1] != 0xFF) {
-      Serial.println("Found DEVICE_MDC");
+      uart0_puts("Found DEVICE_MDC\n");
     } else if (dataIn[i] == DEVICE_CDC && dataIn[i+1] != 0xFF) {
-      Serial.println("Found DEVICE_CDC");
+      uart0_puts("Found DEVICE_CDC\n");
      }
   }
 }
@@ -223,10 +216,10 @@ void device_recognition()
 ISR(INT0_vect)
 {
   #ifdef LOGGING
-    PORTD |= (1 << PD6); // Write 1 to LOG_ISR 
+    PORTD |= (1 << PD6); // Write 1 to LOG_ISR
   #endif
   
-  if(busy == LOW) {      
+  if(busy == LOW) {
 
     if(byteMarker > 3 &&
         dataIn[0] == 0x07 &&
@@ -239,11 +232,11 @@ ISR(INT0_vect)
         PORTD |= (1 << PD4); // Write 1
       } else {
         PORTD &= ~(1 << PD4); // Write 0
-      }  
+      }
     } else {
       // We are reading from the BUS
       // We set the proper bit in the array to 1 or 0
-      int pinv = bitRead(PORTD, 4); // MDATA   
+      uint8_t pinv = PIND & (1<<PD4); // MDATA
       if(pinv) {
         dataIn[byteMarker] |= (1 << bitMarker);
       } else {
@@ -267,13 +260,13 @@ ISR(INT0_vect)
 }
 
 // BUSY LINE ISR
-ISR(INT1_vect) 
+ISR(INT1_vect)
 {
   #ifdef LOGGING
     PORTD |= (1 << PD6); // Write 1 to LOG_ISR
   #endif
   
-  busy = bitRead(PORTD, 3); // MBUSY
+  busy = PIND & (1<<PD3); // MBUSY
   if(busy == LOW) {
     // When we detect busy pulling up we reset the byteMarker
     byteMarker = 0;

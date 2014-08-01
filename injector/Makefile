@@ -1,8 +1,8 @@
 PRG					= melbus_injector
-OBJ					= melbus_injector.o
-MCU_TARGET  = atmega328p
+OBJ					= melbus_injector.o uart/uart.o
+MCU_TARGET  = atmega328
 OPTIMIZE		= -Os
-DEFS 				=
+DEFS 				= -DUART_RX0_BUFFER_SIZE=128 -DUART_TX0_BUFFER_SIZE=128 -DUSART0_ENABLED
 LIBS				=
 
 HZ					= 16000000
