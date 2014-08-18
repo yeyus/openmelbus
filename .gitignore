@@ -28,3 +28,7 @@ tramp
 *.srec
 *.bin
 *.elf
+
+# Python
+*.pyc
+*.py~
