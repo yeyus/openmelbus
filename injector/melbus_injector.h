@@ -18,6 +18,7 @@
 
 // MCU Settings
 #define F_CPU 16000000UL  // 16 MHz
+#define BAUD_RATE 115200
 
 #define HIGH        1
 #define LOW         0

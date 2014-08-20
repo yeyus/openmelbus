@@ -8,8 +8,13 @@
  *
  * @license GPL-3.0+ <http://spdx.org/licenses/GPL-3.0+>
  */
- 
 #include "melbus_injector.h"
+
+#include "sim/simulavr_info.h"
+SIMINFO_DEVICE("atmega328");
+SIMINFO_CPUFREQUENCY(F_CPU);
+SIMINFO_SERIAL_IN("D0", "-", BAUD_RATE);
+SIMINFO_SERIAL_OUT("D1", "-", BAUD_RATE);
 
 #define LOGGING
 
@@ -33,7 +38,7 @@ void main(void)
 {
   // Setup phase
   cli();
-  
+
   // MBUSY
   DDRD &= ~(1<<DDD3); //input
   PORTD |= (1 << PORTD3); // pull up
@@ -46,11 +51,11 @@ void main(void)
   // MRUN
   DDRD &= ~(1<<DDD5); //input
   PORTD |= (1 << PORTD5); // pull up
-  
+
   #ifdef LOGGING
   DDRD |= (1<<PIND6); // Set LOG_ISR output
   #endif
-  
+
   EIMSK = (1 << INT0 | 1 << INT1);
   EICRA |= (1 << ISC01); // INT0 Falling edge
   EICRA |= (0 << ISC00);
@@ -61,13 +66,13 @@ void main(void)
   signal_hu_presence();
 
   // Initialize serial port
-  uart0_init(UART_BAUD_SELECT(115200, 16000000L)+1);
-  
+  uart0_init(UART_BAUD_SELECT(BAUD_RATE, F_CPU)+1);
+
   sei();
- 
+
   uart0_puts("RUN state active\n");
   uart0_puts("Melbus Injector -- Jesus Trujillo 2014(C)\n");
-  
+
   // Infinte loop
   while(1) {
     uint8_t cmd = CMD_UNKNOWN;
@@ -218,7 +223,7 @@ ISR(INT0_vect)
   #ifdef LOGGING
     PORTD |= (1 << PD6); // Write 1 to LOG_ISR
   #endif
-  
+
   if(busy == LOW) {
 
     if(byteMarker > 3 &&
@@ -243,8 +248,8 @@ ISR(INT0_vect)
         dataIn[byteMarker] &= ~(1 << bitMarker);
       }
     }
-    
-    
+
+
     bitMarker--;
     if(bitMarker < 0) {
       DDRD &= ~(1<<PIND4); // input
@@ -253,7 +258,7 @@ ISR(INT0_vect)
       byteMarker++;
     }
   }
-  
+
   #ifdef LOGGING
     PORTD &= ~(1 << PD6); // Write 0 to LOG_ISR
   #endif
@@ -265,7 +270,7 @@ ISR(INT1_vect)
   #ifdef LOGGING
     PORTD |= (1 << PD6); // Write 1 to LOG_ISR
   #endif
-  
+
   busy = PIND & (1<<PD3); // MBUSY
   if(busy == LOW) {
     // When we detect busy pulling up we reset the byteMarker
@@ -273,7 +278,7 @@ ISR(INT1_vect)
   } else {
     delivered = (1&(byteMarker == 0));
   }
-  
+
   #ifdef LOGGING
     PORTD &= ~(1 << PD6); // Write 0 to LOG_ISR
   #endif
