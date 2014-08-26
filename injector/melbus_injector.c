@@ -246,7 +246,7 @@ ISR(INT0_vect)
     {
       dataOut = DEVICE_CDC;
       DDRD |= (1<<PIND4); // Set PD4 output
-      if (dataOut & (1<<bitMarker)) {
+      if (dataOut & (1<<(7-bitMarker))) {
         PORTD |= (1 << PD4); // Write 1
       } else {
         PORTD &= ~(1 << PD4); // Write 0
