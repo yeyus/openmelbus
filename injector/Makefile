@@ -25,7 +25,7 @@ $(PRG).elf: $(OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 clean:
-	rm -rf *.o $(PRG).elf *.eps *.png *.pdf *.bak *.hex *.bin *.srec
+	rm -rf *.o $(PRG).elf *.eps *.png *.pdf *.bak *.hex *.bin *.srec *.vcd
 	rm -rf *.lst *.map $(EXTRA_CLEAN_FILES)
 
 lst:  $(PRG).lst
@@ -65,3 +65,7 @@ $(GDBINITFILE): $(PRG).hex
 	@echo "break main"                   >> $(GDBINITFILE)
 	@echo
 	@echo "Use 'avr-gdb -x $(GDBINITFILE)'"
+
+# simulation
+simulate:
+	PYTHONPATH=$(HOME)/devel/simulavr/src:../ python ./sim/simulation.py $(MCU_TARGET):melbus_injector.elf /tmp/sample.ols 1600000000

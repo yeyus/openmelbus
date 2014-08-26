@@ -63,6 +63,7 @@
 #define UTOA_BUFSIZE 16
 
 void main(void) __attribute__((noreturn));
+void set_cmd(uint8_t pcmd);
 void signal_hu_presence();
 uint8_t parse_melbus_command();
 void debug_melbus_command(int cmd);

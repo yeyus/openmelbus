@@ -16,13 +16,11 @@ SIMINFO_CPUFREQUENCY(F_CPU);
 SIMINFO_SERIAL_IN("D0", "-", BAUD_RATE);
 SIMINFO_SERIAL_OUT("D1", "-", BAUD_RATE);
 
-#define LOGGING
-
 char strbuf[UTOA_BUFSIZE];
 volatile uint8_t dataIn[BUFSIZE];
 volatile uint8_t dataOut;
 volatile uint8_t byteMarker = 0;
-volatile uint8_t bitMarker = 7;
+volatile int8_t bitMarker = 7;
 volatile uint8_t busy = HIGH;
 volatile uint8_t delivered = HIGH;
 
@@ -33,6 +31,9 @@ volatile uint8_t devicePointer;
 
 const uint8_t deviceId[] = {0xA9, 0xE8};
 const uint8_t deviceNum = 2;
+
+#define __LOG_CMD__
+volatile uint8_t cmd = CMD_UNKNOWN;
 
 void main(void)
 {
@@ -52,8 +53,12 @@ void main(void)
   DDRD &= ~(1<<DDD5); //input
   PORTD |= (1 << PORTD5); // pull up
 
-  #ifdef LOGGING
+  #ifdef __LOGGING__
   DDRD |= (1<<PIND6); // Set LOG_ISR output
+  #endif
+
+  #ifdef __LOG_CMD__
+  DDRC |= (1<<DDC0) | (1<<DDC1) | (1<<DDC2) | (1<<DDC3) | (1<<DDC4) | (1<<DDC5);
   #endif
 
   EIMSK = (1 << INT0 | 1 << INT1);
@@ -75,10 +80,10 @@ void main(void)
 
   // Infinte loop
   while(1) {
-    uint8_t cmd = CMD_UNKNOWN;
+    set_cmd(CMD_UNKNOWN);
     if(busy == HIGH && delivered == FALSE)
     {
-      cmd = parse_melbus_command();
+      set_cmd(parse_melbus_command());
       if(cmd == CMD_UNKNOWN) {
         uint8_t i;
         for(i = 0;i<byteMarker;i++) {
@@ -91,6 +96,14 @@ void main(void)
       delivered = TRUE;
     }
   }
+}
+
+void set_cmd(uint8_t pcmd)
+{
+  #ifdef __LOG_CMD__
+  PORTC |= (0x3f & pcmd);
+  #endif
+  cmd = pcmd;
 }
 
 void signal_hu_presence()
@@ -220,7 +233,7 @@ void device_recognition()
 // CLOCK ISR
 ISR(INT0_vect)
 {
-  #ifdef LOGGING
+  #ifdef __LOGGING__
     PORTD |= (1 << PD6); // Write 1 to LOG_ISR
   #endif
 
@@ -259,7 +272,7 @@ ISR(INT0_vect)
     }
   }
 
-  #ifdef LOGGING
+  #ifdef __LOGGING__
     PORTD &= ~(1 << PD6); // Write 0 to LOG_ISR
   #endif
 }
@@ -267,7 +280,7 @@ ISR(INT0_vect)
 // BUSY LINE ISR
 ISR(INT1_vect)
 {
-  #ifdef LOGGING
+  #ifdef __LOGGING__
     PORTD |= (1 << PD6); // Write 1 to LOG_ISR
   #endif
 
@@ -279,7 +292,7 @@ ISR(INT1_vect)
     delivered = (1&(byteMarker == 0));
   }
 
-  #ifdef LOGGING
+  #ifdef __LOGGING__
     PORTD &= ~(1 << PD6); // Write 0 to LOG_ISR
   #endif
 }
