@@ -8,18 +8,21 @@
  *
  * @license GPL-3.0+ <http://spdx.org/licenses/GPL-3.0+>
  */
- 
 #include "melbus_injector.h"
 
-#define LOGGING
+#include "sim/simulavr_info.h"
+SIMINFO_DEVICE("atmega328");
+SIMINFO_CPUFREQUENCY(F_CPU);
+SIMINFO_SERIAL_IN("D0", "-", BAUD_RATE);
+SIMINFO_SERIAL_OUT("D1", "-", BAUD_RATE);
 
 char strbuf[UTOA_BUFSIZE];
 volatile uint8_t dataIn[BUFSIZE];
 volatile uint8_t dataOut;
 volatile uint8_t byteMarker = 0;
-volatile uint8_t bitMarker = 7;
+volatile int8_t bitMarker = 7;
 volatile uint8_t busy = HIGH;
-volatile uint8_t delivered = HIGH;
+volatile uint8_t processingPacket = FALSE;
 
 const uint8_t knownDevices[] = {DEVICE_CD, DEVICE_TV, DEVICE_SAT, DEVICE_MDC, DEVICE_CDC};
 const uint8_t enabledDevices[] = {DEVICE_TV, DEVICE_MDC, DEVICE_CDC};
@@ -29,11 +32,14 @@ volatile uint8_t devicePointer;
 const uint8_t deviceId[] = {0xA9, 0xE8};
 const uint8_t deviceNum = 2;
 
+#define __LOG_CMD__
+volatile uint8_t cmd = CMD_UNKNOWN;
+
 void main(void)
 {
   // Setup phase
   cli();
-  
+
   // MBUSY
   DDRD &= ~(1<<DDD3); //input
   PORTD |= (1 << PORTD3); // pull up
@@ -46,11 +52,15 @@ void main(void)
   // MRUN
   DDRD &= ~(1<<DDD5); //input
   PORTD |= (1 << PORTD5); // pull up
-  
-  #ifdef LOGGING
+
+  #ifdef __LOGGING__
   DDRD |= (1<<PIND6); // Set LOG_ISR output
   #endif
-  
+
+  #ifdef __LOG_CMD__
+  DDRC |= (1<<DDC0) | (1<<DDC1) | (1<<DDC2) | (1<<DDC3) | (1<<DDC4) | (1<<DDC5);
+  #endif
+
   EIMSK = (1 << INT0 | 1 << INT1);
   EICRA |= (1 << ISC01); // INT0 Falling edge
   EICRA |= (0 << ISC00);
@@ -61,19 +71,19 @@ void main(void)
   signal_hu_presence();
 
   // Initialize serial port
-  uart0_init(UART_BAUD_SELECT(115200, 16000000L)+1);
-  
+  uart0_init(UART_BAUD_SELECT(BAUD_RATE, F_CPU)+1);
+
   sei();
- 
+
   uart0_puts("RUN state active\n");
   uart0_puts("Melbus Injector -- Jesus Trujillo 2014(C)\n");
-  
+
   // Infinte loop
   while(1) {
-    uint8_t cmd = CMD_UNKNOWN;
-    if(busy == HIGH && delivered == FALSE)
+    set_cmd(CMD_UNKNOWN);
+    if(busy && processingPacket)
     {
-      cmd = parse_melbus_command();
+      set_cmd(parse_melbus_command());
       if(cmd == CMD_UNKNOWN) {
         uint8_t i;
         for(i = 0;i<byteMarker;i++) {
@@ -83,18 +93,47 @@ void main(void)
         uart0_puts("\r\n");
       }
       debug_melbus_command(cmd);
-      delivered = TRUE;
+      // We finished with the packet so we mark as finished
+      processingPacket = FALSE;
     }
   }
+}
+
+void set_cmd(uint8_t pcmd)
+{
+  #ifdef __LOG_CMD__
+  PORTC |= (0x3f & pcmd);
+  #endif
+  cmd = pcmd;
 }
 
 void signal_hu_presence()
 {
   DDRD |= (1<<PIND3); // Set MBUSY output
   PORTD &= ~(1 << PD3); // Write 0
+  #ifndef __NO_DELAY__
   _delay_ms(1500);
+  #endif
   DDRD &= ~(1<<PIND3); // input
   PORTD |= (1<<PD3); // enable pull-up
+}
+
+static inline void write_output() {
+  DDRD |= (1<<PIND4); // Set PD4 output
+  if (dataOut & (1<<(7-bitMarker))) {
+    PORTD |= (1 << PD4); // Write 1
+  } else {
+    PORTD &= ~(1 << PD4); // Write 0
+  }
+}
+
+static inline void read_input() {
+  uint8_t pinv = PIND & (1<<PD4); // MDATA
+  if(pinv) {
+    dataIn[byteMarker] |= (1 << bitMarker);
+  } else {
+    dataIn[byteMarker] &= ~(1 << bitMarker);
+  }
 }
 
 uint8_t parse_melbus_command()
@@ -215,36 +254,36 @@ void device_recognition()
 // CLOCK ISR
 ISR(INT0_vect)
 {
-  #ifdef LOGGING
+  #ifdef __LOGGING__
     PORTD |= (1 << PD6); // Write 1 to LOG_ISR
   #endif
-  
+
   if(busy == LOW) {
 
-    if(byteMarker > 3 &&
-        dataIn[0] == 0x07 &&
-        dataIn[byteMarker-1] == DEVICE_CDC &&
-        dataIn[byteMarker-2] != DEVICE_CDC)
+    if(byteMarker > 30 && dataIn[0] == 0x07)
     {
-      dataOut = DEVICE_CDC;
-      DDRD |= (1<<PIND4); // Set PD4 output
-      if (dataOut & (1<<bitMarker)) {
-        PORTD |= (1 << PD4); // Write 1
+      // Detected ongoing device registration
+      if (dataIn[byteMarker-1] == DEVICE_MDC &&
+          dataIn[byteMarker-2] != DEVICE_MDC)
+      {
+        // Register MDC
+        dataOut = DEVICE_MDC;
+        write_output();
+      } else if(dataIn[byteMarker-1] == DEVICE_CDC &&
+          dataIn[byteMarker-2] != DEVICE_CDC)
+      {
+        // Register CDC
+        dataOut = DEVICE_CDC;
+        write_output();
       } else {
-        PORTD &= ~(1 << PD4); // Write 0
+        read_input();
       }
     } else {
       // We are reading from the BUS
       // We set the proper bit in the array to 1 or 0
-      uint8_t pinv = PIND & (1<<PD4); // MDATA
-      if(pinv) {
-        dataIn[byteMarker] |= (1 << bitMarker);
-      } else {
-        dataIn[byteMarker] &= ~(1 << bitMarker);
-      }
+      read_input();
     }
-    
-    
+
     bitMarker--;
     if(bitMarker < 0) {
       DDRD &= ~(1<<PIND4); // input
@@ -253,8 +292,8 @@ ISR(INT0_vect)
       byteMarker++;
     }
   }
-  
-  #ifdef LOGGING
+
+  #ifdef __LOGGING__
     PORTD &= ~(1 << PD6); // Write 0 to LOG_ISR
   #endif
 }
@@ -262,19 +301,20 @@ ISR(INT0_vect)
 // BUSY LINE ISR
 ISR(INT1_vect)
 {
-  #ifdef LOGGING
+  #ifdef __LOGGING__
     PORTD |= (1 << PD6); // Write 1 to LOG_ISR
   #endif
-  
+
   busy = PIND & (1<<PD3); // MBUSY
   if(busy == LOW) {
     // When we detect busy pulling up we reset the byteMarker
     byteMarker = 0;
   } else {
-    delivered = (1&(byteMarker == 0));
+    // we mark ourselves as processing a packet if busy goes high and byteMarker is >0
+    processingPacket = byteMarker > 1;
   }
-  
-  #ifdef LOGGING
+
+  #ifdef __LOGGING__
     PORTD &= ~(1 << PD6); // Write 0 to LOG_ISR
   #endif
 }

@@ -1,20 +1,25 @@
 PRG					= melbus_injector
 OBJ					= melbus_injector.o uart/uart.o
-MCU_TARGET  = atmega328
-OPTIMIZE		= -Os
-DEFS 				= -DUART_RX0_BUFFER_SIZE=128 -DUART_TX0_BUFFER_SIZE=128 -DUSART0_ENABLED
+MCU_TARGET  		= atmega328
+OPTIMIZE			= -Os
+DEFS 				= -DUART_RX0_BUFFER_SIZE=128 -DUART_TX0_BUFFER_SIZE=128 -DUSART0_ENABLED -D__NO_DELAY__
 LIBS				=
 
 HZ					= 16000000
 
+# simulation
+
+SAMPLE_FILE			= /tmp/sample.ols
+DELAY 				= 16000
+
 # You should not have to change anything below here.
 
-CC             = avr-gcc
+CC             		= avr-gcc
 
 # Override is only needed by avr-lib build system.
 
 override CFLAGS        = -g -DF_CPU=$(HZ) -Wall $(OPTIMIZE) -mmcu=$(MCU_TARGET) $(DEFS)
-override LDFLAGS       = -Wl,-Map,$(PRG).map
+override LDFLAGS       = -Wl,-Map,$(PRG).map,--section-start=.siminfo=0x900000
 
 OBJCOPY        = avr-objcopy
 OBJDUMP        = avr-objdump
@@ -25,7 +30,7 @@ $(PRG).elf: $(OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 clean:
-	rm -rf *.o $(PRG).elf *.eps *.png *.pdf *.bak *.hex *.bin *.srec
+	rm -rf *.o $(PRG).elf *.eps *.png *.pdf *.bak *.hex *.bin *.srec *.vcd
 	rm -rf *.lst *.map $(EXTRA_CLEAN_FILES)
 
 lst:  $(PRG).lst
@@ -65,3 +70,7 @@ $(GDBINITFILE): $(PRG).hex
 	@echo "break main"                   >> $(GDBINITFILE)
 	@echo
 	@echo "Use 'avr-gdb -x $(GDBINITFILE)'"
+
+# simulation
+simulate:
+	PYTHONPATH=$(HOME)/devel/simulavr/src:../ python ./sim/simulation.py $(MCU_TARGET):melbus_injector.elf $(SAMPLE_FILE) $(DELAY)
