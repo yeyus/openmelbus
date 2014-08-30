@@ -1,6 +1,7 @@
 # Python Script
 from sys import argv
 from os.path import splitext, basename
+import os
 
 import pysimulavr
 from SimUtils import sim_utils
@@ -32,7 +33,7 @@ if __name__ == "__main__":
 
   proc, elffile = argv[1].split(":")
 
-  doGDB = True
+  doGDB = os.environ.get('ENABLE_GDB')
   sim = sim_utils.SimulavrAdapter()
   sim.dmanSingleDeviceApplication()
   dev = sim.loadDevice(proc, elffile, doGDB)

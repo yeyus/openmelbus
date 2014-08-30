@@ -32,3 +32,6 @@ tramp
 # Python
 *.pyc
 *.py~
+
+# Vcd files
+*.vcd

@@ -1,15 +1,20 @@
 PRG					= melbus_injector
 OBJ					= melbus_injector.o uart/uart.o
-MCU_TARGET  = atmega328
-OPTIMIZE		= -Os
-DEFS 				= -DUART_RX0_BUFFER_SIZE=128 -DUART_TX0_BUFFER_SIZE=128 -DUSART0_ENABLED
+MCU_TARGET  		= atmega328
+OPTIMIZE			= -Os
+DEFS 				= -DUART_RX0_BUFFER_SIZE=128 -DUART_TX0_BUFFER_SIZE=128 -DUSART0_ENABLED -D__NO_DELAY__
 LIBS				=
 
 HZ					= 16000000
 
+# simulation
+
+SAMPLE_FILE			= /tmp/sample.ols
+DELAY 				= 16000
+
 # You should not have to change anything below here.
 
-CC             = avr-gcc
+CC             		= avr-gcc
 
 # Override is only needed by avr-lib build system.
 
@@ -68,4 +73,4 @@ $(GDBINITFILE): $(PRG).hex
 
 # simulation
 simulate:
-	PYTHONPATH=$(HOME)/devel/simulavr/src:../ python ./sim/simulation.py $(MCU_TARGET):melbus_injector.elf /tmp/sample.ols 1600000000
+	PYTHONPATH=$(HOME)/devel/simulavr/src:../ python ./sim/simulation.py $(MCU_TARGET):melbus_injector.elf $(SAMPLE_FILE) $(DELAY)

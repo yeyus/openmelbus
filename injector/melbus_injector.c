@@ -22,7 +22,7 @@ volatile uint8_t dataOut;
 volatile uint8_t byteMarker = 0;
 volatile int8_t bitMarker = 7;
 volatile uint8_t busy = HIGH;
-volatile uint8_t delivered = HIGH;
+volatile uint8_t processingPacket = FALSE;
 
 const uint8_t knownDevices[] = {DEVICE_CD, DEVICE_TV, DEVICE_SAT, DEVICE_MDC, DEVICE_CDC};
 const uint8_t enabledDevices[] = {DEVICE_TV, DEVICE_MDC, DEVICE_CDC};
@@ -81,7 +81,7 @@ void main(void)
   // Infinte loop
   while(1) {
     set_cmd(CMD_UNKNOWN);
-    if(busy == HIGH && delivered == FALSE)
+    if(busy && processingPacket)
     {
       set_cmd(parse_melbus_command());
       if(cmd == CMD_UNKNOWN) {
@@ -93,7 +93,8 @@ void main(void)
         uart0_puts("\r\n");
       }
       debug_melbus_command(cmd);
-      delivered = TRUE;
+      // We finished with the packet so we mark as finished
+      processingPacket = FALSE;
     }
   }
 }
@@ -110,9 +111,29 @@ void signal_hu_presence()
 {
   DDRD |= (1<<PIND3); // Set MBUSY output
   PORTD &= ~(1 << PD3); // Write 0
+  #ifndef __NO_DELAY__
   _delay_ms(1500);
+  #endif
   DDRD &= ~(1<<PIND3); // input
   PORTD |= (1<<PD3); // enable pull-up
+}
+
+static inline void write_output() {
+  DDRD |= (1<<PIND4); // Set PD4 output
+  if (dataOut & (1<<(7-bitMarker))) {
+    PORTD |= (1 << PD4); // Write 1
+  } else {
+    PORTD &= ~(1 << PD4); // Write 0
+  }
+}
+
+static inline void read_input() {
+  uint8_t pinv = PIND & (1<<PD4); // MDATA
+  if(pinv) {
+    dataIn[byteMarker] |= (1 << bitMarker);
+  } else {
+    dataIn[byteMarker] &= ~(1 << bitMarker);
+  }
 }
 
 uint8_t parse_melbus_command()
@@ -239,29 +260,29 @@ ISR(INT0_vect)
 
   if(busy == LOW) {
 
-    if(byteMarker > 3 &&
-        dataIn[0] == 0x07 &&
-        dataIn[byteMarker-1] == DEVICE_CDC &&
-        dataIn[byteMarker-2] != DEVICE_CDC)
+    if(byteMarker > 30 && dataIn[0] == 0x07)
     {
-      dataOut = DEVICE_CDC;
-      DDRD |= (1<<PIND4); // Set PD4 output
-      if (dataOut & (1<<(7-bitMarker))) {
-        PORTD |= (1 << PD4); // Write 1
+      // Detected ongoing device registration
+      if (dataIn[byteMarker-1] == DEVICE_MDC &&
+          dataIn[byteMarker-2] != DEVICE_MDC)
+      {
+        // Register MDC
+        dataOut = DEVICE_MDC;
+        write_output();
+      } else if(dataIn[byteMarker-1] == DEVICE_CDC &&
+          dataIn[byteMarker-2] != DEVICE_CDC)
+      {
+        // Register CDC
+        dataOut = DEVICE_CDC;
+        write_output();
       } else {
-        PORTD &= ~(1 << PD4); // Write 0
+        read_input();
       }
     } else {
       // We are reading from the BUS
       // We set the proper bit in the array to 1 or 0
-      uint8_t pinv = PIND & (1<<PD4); // MDATA
-      if(pinv) {
-        dataIn[byteMarker] |= (1 << bitMarker);
-      } else {
-        dataIn[byteMarker] &= ~(1 << bitMarker);
-      }
+      read_input();
     }
-
 
     bitMarker--;
     if(bitMarker < 0) {
@@ -289,7 +310,8 @@ ISR(INT1_vect)
     // When we detect busy pulling up we reset the byteMarker
     byteMarker = 0;
   } else {
-    delivered = (1&(byteMarker == 0));
+    // we mark ourselves as processing a packet if busy goes high and byteMarker is >0
+    processingPacket = byteMarker > 1;
   }
 
   #ifdef __LOGGING__
